@@ -3,9 +3,10 @@ from memory_profiler import profile
 
 
 from PIL import Image, ImageFile
-ImageFile.LOAD_TRUNCATED_IMAGES = True
+Image.MAX_IMAGE_PIXELS = 1e10
+#ImageFile.LOAD_TRUNCATED_IMAGES = True
 image_path='/dds/workspace/data_ja/CAT_1_9013.jpg'
-image_path='/dds/workspace/data_ja/CAT_1_9013.bmp'
+#image_path='/dds/workspace/data_ja/CAT_1_9013.bmp'
 #image_path='/dds/workspace/data_ja/test.jpg'
 #image_path='/dds/workspace/data_ja/test.jpg.png'
 
@@ -33,10 +34,11 @@ def my_func():
     
     
     i = Image.open(image_path)
-    w=10000
+    w=32792
     h=10000
     i.size = (w, h)
-    i.tile = [('raw', (0, 0, w, h), 138, ('BGR', 98376, -1))]
+    i.tile = [('jpeg', (0, 0, w, h), 0, ('RGB', ''))]
+    #i.tile = [('raw', (0, 0, w, h), 138, ('BGR', 98376, -1))]
     print("Changing tile")
     print(i.size)
     print(i.tile)
