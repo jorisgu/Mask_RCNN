@@ -7,13 +7,6 @@ Image.MAX_IMAGE_PIXELS = 1e10
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import os
 
-
-#ImageFile.LOAD_TRUNCATED_IMAGES = True
-image_path='/dds/workspace/data_ja/CAT_1_9013.jpg'
-#image_path='/dds/workspace/data_ja/CAT_1_9013.bmp'
-image_path='/dds/workspace/data_ja/test.jp2'
-
-
 def change_tile(tile, new_width, new_height, memory_offset):
     tup = tile[0]
     return [(tup[0],) + ((0,0,new_width, new_height),) + (tup[-2]+memory_offset,) + (tup[-1],)]
@@ -28,8 +21,20 @@ def read_line_portion(img_path,x,y,w,h,i):
     #print(img_pil.size)
     return img_pil
 
-image_path='/dds/workspace/data_ja/cat.ppm'
+def read_from_memory(img_path,x,y,w,h):
+    result = Image.new('RGB',(w,h))
+    for i in range(h):
+        a = read_line_portion(img_path, x,y,w,h,i)
+        result.paste(a,(0,i))
+    return result
 
+def show_thumbnail(img_pil, max_size_thumbnail = 200):
+    img_pil_thumbnail = img_pil.copy()
+    size = img_pil.size
+    max_size_img = float(max(size))
+    new_size =  tuple((max_size_thumbnail/max_size_img*np.asarray(result.size)).astype(int))
+    img_pil_thumbnail.thumbnail(new_size, Image.ANTIALIAS)
+    return img_pil_thumbnail
 @profile
 def my_func():
     #(960, 230)
