@@ -633,6 +633,56 @@ def compute_ap(gt_boxes, gt_class_ids,
     return mAP, precisions, recalls, overlaps
 
 
+def jg_compute_scores(gt_boxes, gt_class_ids,
+               pred_boxes, pred_class_ids, pred_scores,
+               iou_threshold=0.5):
+    """Compute Average Precision at a set IoU threshold (default 0.5).
+
+    Returns:
+    mAP: Mean Average Precision
+    precisions: List of precisions at different class score thresholds.
+    recalls: List of recall values at different class score thresholds.
+    overlaps: [pred_boxes, gt_boxes] IoU overlaps.
+    """
+    # Trim zero padding and sort predictions by score from high to low
+    # TODO: cleaner to do zero unpadding upstream
+    gt_boxes = trim_zeros(gt_boxes)
+    pred_boxes = trim_zeros(pred_boxes)
+    pred_scores = pred_scores[:pred_boxes.shape[0]]
+    indices = np.argsort(pred_scores)[::-1]
+    pred_boxes = pred_boxes[indices]
+    pred_class_ids = pred_class_ids[indices]
+    pred_scores = pred_scores[indices]
+
+    # Compute IoU overlaps [pred_boxes, gt_boxes]
+    overlaps = compute_overlaps(pred_boxes, gt_boxes)
+
+    # Loop through ground truth boxes and find matching predictions
+    match_count = 0
+    pred_count = 0
+    pred_match = np.zeros([pred_boxes.shape[0]])
+    gt_match = np.zeros([gt_boxes.shape[0]])
+    for i in range(len(pred_boxes)):
+        
+        pred_count+=1
+        # Find best matching ground truth box
+        sorted_ixs = np.argsort(overlaps[i])[::-1]
+        for j in sorted_ixs:
+            # If ground truth box is already matched, go to next one
+            if gt_match[j] == 1:
+                continue
+            # If we reach IoU smaller than the threshold, end the loop
+            iou = overlaps[i, j]
+            if iou < iou_threshold:
+                break
+            # Do we have a match?
+            if pred_class_ids[i] == gt_class_ids[j]:
+                match_count += 1
+                gt_match[j] = 1
+                pred_match[i] = 1
+                break
+    return match_count, pred_count, gt_boxes.shape[0]
+
 def compute_recall(pred_boxes, gt_boxes, iou):
     """Compute the recall at the given IoU threshold. It's an indication
     of how many GT boxes were found by the given prediction boxes.
