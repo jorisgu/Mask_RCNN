@@ -46,34 +46,29 @@ if not os.path.exists(COCO_MODEL_PATH):
 
 # ## Notebook Preferences
 
-# In[3]:
-
-def get_ax(rows=1, cols=1, size=8):
-    """Return a Matplotlib Axes array to be used in
-    all visualizations in the notebook. Provide a
-    central point to control graph sizes.
-    
-    Change the default size attribute to control the size
-    of rendered images
-    """
-    _, ax = plt.subplots(rows, cols, figsize=(size*cols, size*rows))
-    return ax
-
-
-# ## Dataset
-
-# In[4]:
 
 import jalbert
 config = jalbert.jalbertConfig()
-dim = 1000
+dim = 512
 
 data_folder = "/dds/work/workspace/data_ja/"
 groundtruth_path='/dds/work/workspace/data_ja/RF-CAT1-v1.0.csv'
 
+scales = [0.8, 1., 1.25]
+
+#nb_img = 77
+
+dataset = jalbert.jalbertDataset()
+dataset.load_jalbert(dim, data_folder,groundtruth_path, scales)#, force_new_dataset=True)
+dataset.prepare()
+print("Image Count: {}".format(len(dataset.image_ids)))
+print("Class Count: {}".format(dataset.num_classes))
+for i, info in enumerate(dataset.class_info):
+    print("{:3}. {:50}".format(i, info['name']))
+
+nb_img = dataset.num_images
 
 
-nb_img = 427
 split_train = slice(1,nb_img//2)
 split_test = slice(nb_img//2,nb_img)
 
@@ -81,7 +76,7 @@ print(40*'~')
 print("train")
 print("")
 dataset_train = jalbert.jalbertDataset()
-dataset_train.load_jalbert(dim, data_folder,groundtruth_path, split_train)
+dataset_train.load_jalbert(dim, data_folder,groundtruth_path, scales, split_train)
 dataset_train.prepare()
 
 print("Image Count: {}".format(len(dataset_train.image_ids)))
@@ -94,7 +89,7 @@ print(40*'~')
 print("validation")
 print("")
 dataset_val = jalbert.jalbertDataset()
-dataset_val.load_jalbert(dim, data_folder,groundtruth_path, split_test)
+dataset_val.load_jalbert(dim, data_folder,groundtruth_path, scales, split_test)
 dataset_val.prepare()
 
 print("Image Count: {}".format(len(dataset_val.image_ids)))
@@ -106,7 +101,7 @@ for i, info in enumerate(dataset_val.class_info):
 # In[5]:
 
 #config.IMAGES_PER_GPU = 2
-config.display()
+#config.display()
 
 
 # In[6]:
@@ -131,7 +126,7 @@ model = modellib.MaskRCNN(mode="training", config=config,
 # In[26]:
 
 # Which weights to start with?
-init_with = "coco"  # imagenet, coco, or last
+init_with = "imagenet"  # imagenet, coco, or last
 
 if init_with == "imagenet":
     model.load_weights(model.get_imagenet_weights(), by_name=True)
@@ -161,10 +156,10 @@ elif init_with == "last":
 # layers. You can also pass a regular expression to select
 # which layers to train by name pattern.
 
-if False:
+if True:
     model.train(dataset_train, dataset_val, 
                 learning_rate=config.LEARNING_RATE, 
-                epochs=2, 
+                epochs=50, 
                 layers='heads')
 
 
@@ -174,11 +169,11 @@ if False:
 # Passing layers="all" trains all layers. You can also 
 # pass a regular expression to select which layers to
 # train by name pattern.
-
-model.train(dataset_train, dataset_val, 
-            learning_rate=config.LEARNING_RATE / 10,
-            epochs=10, 
-            layers="all")
+if False:
+    model.train(dataset_train, dataset_val, 
+                learning_rate=config.LEARNING_RATE / 10,
+                epochs=10, 
+                layers="all")
 
 
 # In[16]:
@@ -247,14 +242,16 @@ model.load_weights(model_path, by_name=True)
 # ## Evaluation
 
 # In[22]:
+from tqdm import tqdm
 
-# Compute VOC-Style mAP @ IoU=0.5
-# Running on 10 images. Increase for better accuracy.
-nb_test_images = 100
+nb_test_images = len(dataset_val.image_ids)
 print("testing on "+str(nb_test_images)+" images...")
 image_ids = np.random.choice(dataset_val.image_ids, nb_test_images)
 APs = []
-for image_id in image_ids:
+match_counts = []
+pred_counts = []
+gt_boxes_counts = []
+for image_id in tqdm(image_ids):
     # Load image and ground truth data
     image, image_meta, gt_class_id, gt_bbox, gt_mask =        modellib.load_image_gt(dataset_val, inference_config,
                                image_id, use_mini_mask=False)
@@ -265,12 +262,20 @@ for image_id in image_ids:
     # Compute AP
     AP, precisions, recalls, overlaps =        utils.compute_ap(gt_bbox, gt_class_id,
                          r["rois"], r["class_ids"], r["scores"])
+    
+    match_count, pred_count, gt_boxes_count = utils.jg_compute_scores(gt_bbox, gt_class_id,
+                         r["rois"], r["class_ids"], r["scores"])
     APs.append(AP)
+    match_counts.append(match_count)
+    pred_counts.append(pred_count)
+    gt_boxes_counts.append(gt_boxes_count)
     
 print("mAP: ", np.mean(APs))
+print("match_count: ", np.sum(match_counts))
+print("pred_count: ", np.sum(pred_counts))
+print("gt_boxes_count: ", np.sum(gt_boxes_counts))
+print("precision: ", np.sum(match_counts)/np.sum(pred_counts))
+print("recall: ", np.sum(match_counts)/np.sum(gt_boxes_counts))
 print("Over.")
-
-# In[ ]:
-
 
 

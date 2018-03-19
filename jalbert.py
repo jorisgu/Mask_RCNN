@@ -6,9 +6,10 @@ import os.path as osp
 import numpy as np
 import glob
 
+from tqdm import tqdm
 import errno    
 import os
-
+import pickle
 
 def mkdir_p(path):
     try:
@@ -48,6 +49,13 @@ def show_thumbnail(img_pil, max_size_thumbnail = 200.):
     img_pil_thumbnail.thumbnail(new_size, Image.ANTIALIAS)
     return img_pil_thumbnail
 
+def pil_resize(img_pil, new_max_size = 1000.):
+    size = img_pil.size
+    max_size_img = float(max(size))
+    new_size =  tuple((new_max_size/max_size_img*np.asarray(size)).astype(int))
+    img_pil_resized = img_pil.resize(new_size, Image.NEAREST)
+    return img_pil_resized
+
 def convert_to_ppm(img_path,verbose=False):
     
     if osp.isfile(img_path):
@@ -83,6 +91,29 @@ def list_all_images(folder,fileExtensions = ['jpg','jpeg','JPG','JPEG']):
 
 
 
+def convert_to_ppm_by_folder(folder_in, folder_out=None, fileExtensions = ['jpg','jpeg','JPG','JPEG'], verbose = False):
+    if folder_out is None:
+        folder_out = folder_in+"/ppms/"
+    mkdir_p(folder_out)
+    #in
+    img_paths_in = list_all_images(folder_in, fileExtensions)
+    img_names_in = [osp.splitext(osp.splitext(osp.basename(img_path))[0])[0] for img_path in img_paths_in]
+    #out
+    img_paths_out = list_all_images(folder_out, ['ppm'])
+    img_names_out = [osp.splitext(osp.splitext(osp.basename(img_path))[0])[0] for img_path in img_paths_out]
+    
+    if verbose :
+        print("in")
+        print(img_paths_in)
+        print(img_names_in)
+        print("out")
+        print(img_paths_out)
+        print(img_names_out)
+    for img_name_in_id,img_name_in in enumerate(tqdm(img_names_in,ncols=150,desc='ppm conversion')):
+        if img_name_in not in img_names_out:
+            if verbose:
+                print("converting "+img_name_in+"...")
+            os.system("convert " +img_paths_in[img_name_in_id]+" "+folder_out+img_name_in+".ppm")
 
 ## objectif : connaître k et s' en fonction de W, w'(scale,dim) et s(overlap,w') :
 # overlap, c'est un overlap minimal qui peut s'aggrandir pour bien couvrir l'image
@@ -122,13 +153,18 @@ def make_spk(W, w=1000, overlap = 0.5, scale = 1):
     #     key='D'+str(W)+'_d'+str(w)+'_o'+str(overlap)+'_s'+str(scale)
     return (sp,k)
 
-def make_img_infos(folder,groundtruth_path,dim=1000):
+def make_img_infos(folder,groundtruth_path,dim=1000, scales = [1., 1.25, 0.8, 0.6, 0.4],force_new_dataset=False):
     """
     Fonction qui construit le dataset, 
     elle liste les images, leurs tailles, le nombre de crops possibles et produit les masks de la VT
     """
+    
+    saving_path = osp.join(folder,'dataset_dict.p')
+    if osp.isfile(saving_path) and not force_new_dataset:
+        print("Loading from precedent scan")
+        return pickle.load( open( saving_path, "rb" ) )
     img_infos={}
-    img_infos['paths']=list_all_images(folder,fileExtensions = ['ppm'])
+    img_infos['paths']=list_all_images(folder+'/ppms/',fileExtensions = ['ppm'])
     img_infos['mask_paths']=[]
     img_infos['filenames']=[]
     img_infos['size']=[]
@@ -143,14 +179,21 @@ def make_img_infos(folder,groundtruth_path,dim=1000):
     for row in groundtruth_reader:
         groundtruth_dict.setdefault(row['filename'],[]).append(row)
 
-    scales = [1., 1.25, 0.8, 0.6, 0.4]
+    #scales = [1., 1.25, 0.8, 0.6, 0.4]
     scales.sort()
-    for img_id,img_path in enumerate(img_infos['paths']):
-        img_pil = Image.open(img_path)
+    for img_id,img_path in enumerate(tqdm(img_infos['paths'],desc='Image and VT loading',ncols=150)):
+        
         filename = osp.splitext(osp.splitext(osp.basename(img_path))[0])[0]
+        #filename = osp.splitext(osp.basename(img_path))[0]
+        
+        img_pil = Image.open(img_path)
         img_infos['filenames'].append(filename)
         img_infos['size'].append(img_pil.size)
-        img_infos['groundtruth'].append(groundtruth_dict[filename])
+        if filename not in groundtruth_dict:
+            gt_dict = []
+        else:
+            gt_dict = groundtruth_dict[filename]
+        img_infos['groundtruth'].append(gt_dict)
 
         # calcul du meilleur stride (sp) et du nombre de crops possibles (k) dans chaque direction (x,y)
         W = img_pil.size[0]
@@ -169,7 +212,7 @@ def make_img_infos(folder,groundtruth_path,dim=1000):
         # if not osp.isfile(mask_path):
         mkdir_p(folder+'masks')
         mask = Image.new('L',img_pil.size)
-        for id_label,label in enumerate(groundtruth_dict[filename]):
+        for id_label,label in enumerate(gt_dict):
             label_polygon = [(int(label['x1']),int(label['y1'])),(int(label['x2']),int(label['y2'])),(int(label['x3']),int(label['y3'])),(int(label['x4']),int(label['y4']))]
             ImageDraw.Draw(mask).polygon(label_polygon, outline=id_label, fill=id_label)
         mask.save(mask_path)
@@ -192,6 +235,8 @@ def make_img_infos(folder,groundtruth_path,dim=1000):
                     crop = (img_id,scale,int(xi),int(yi),has_vt)    
                     img_infos['list_crops'].append(crop)
         img_infos['crops_with_labels'] = [id for id,crop in enumerate(img_infos['list_crops']) if crop[4]==1]
+    print("Saving this scan")
+    pickle.dump( img_infos, open( saving_path, "wb" ) )
     return img_infos
 
 def load_crop(crop,img_path,dim=1000):
@@ -223,23 +268,24 @@ class jalbertConfig(Config):
 
     # Train on 1 GPU and 8 images per GPU. We can put multiple images on each
     # GPU because the images are small. Batch size is 8 (GPUs * images/GPU).
-    #GPU_COUNT = 1
-    IMAGES_PER_GPU = 2
+    GPU_COUNT = 1
+    IMAGES_PER_GPU = 4
 
     # Number of classes (including background)
     NUM_CLASSES = 1 + 1  # background + label
 
     # Use small images for faster training. Set the limits of the small side
     # the large side, and that determines the image shape.
-    #IMAGE_MIN_DIM = 128
-    #IMAGE_MAX_DIM = 128
+    IMAGE_MIN_DIM = 512
+    IMAGE_MAX_DIM = 512
 
     # Use smaller anchors because our image and objects are small
     #RPN_ANCHOR_SCALES = (8, 16, 32, 64, 128)  # anchor side in pixels
+    RPN_ANCHOR_SCALES = (16, 32, 64, 128)  # anchor side in pixels
 
     # Reduce training ROIs per image because the images are small and have
     # few objects. Aim to allow ROI sampling to pick 33% positive ROIs.
-    #TRAIN_ROIS_PER_IMAGE = 32
+    TRAIN_ROIS_PER_IMAGE = 32
 
     # Use a small epoch since the data is simple
     STEPS_PER_EPOCH = 1000
@@ -247,27 +293,36 @@ class jalbertConfig(Config):
     # use small validation steps since the epoch is small
     VALIDATION_STEPS = 5
 
+import copy
+def copydataset(dataset,split):
+    dataset_copy = copy.deepcopy(dataset)
+    dataset_copy.change_split(split)
+    dataset_copy.prepare()
+    return dataset_copy
 
 class jalbertDataset(utils.Dataset):
     """Generates the jalbert.
     """
 
-    def load_jalbert(self, dim,data_folder,groundtruth_path,split=None):
+    def load_jalbert(self, dim,data_folder,groundtruth_path, scales = [1., 1.25, 0.8, 0.6, 0.4], split=None,force_new_dataset=False):
 
 
         self.data_folder = data_folder
         self.groundtruth_path= groundtruth_path
         
         self.dim = dim
+        self.scales = scales
 
-        #purge_ppm(folder)
-        list_images_path = list_all_images(self.data_folder)
-        for img_path in list_images_path:
-            convert_to_ppm(img_path)
         
-        print("Loading infos...")
-        self.img_infos = make_img_infos(self.data_folder,self.groundtruth_path)
-        print("Loading infos : ok !")
+        convert_to_ppm_by_folder(data_folder)
+        #purge_ppm(folder)
+        #list_images_path = list_all_images(self.data_folder)
+        #for img_path in list_images_path:
+        #    convert_to_ppm(img_path)
+        
+        #print("Loading infos...")
+        self.img_infos = make_img_infos(self.data_folder,self.groundtruth_path, self.dim, self.scales, force_new_dataset)
+        #print("Loading infos : ok !")
         
         
         # Add classes
@@ -276,20 +331,28 @@ class jalbertDataset(utils.Dataset):
         #self.add_class("jalbert", 3, "chaine")
 
         # Add images
+        self.change_split(split)
+        
+    def change_split(self,split):
         if split is not None:
             self.split=self.img_infos['crops_with_labels'][split]
         else:
             self.split = self.img_infos['crops_with_labels']
-            
+        
+        self.image_info = []            
+        
         for i in range(len(self.split)):
             self.add_image("jalbert", image_id=i, path=None)
+        
+    
 
     def load_image(self, image_id):
         """Load the specified image and return a [H,W,3] Numpy array.
         """
         
         crop = self.img_infos['list_crops'][self.split[image_id]]
-        result = np.array(load_crop(crop,self.img_infos['paths'][crop[0]]))
+        #result = np.array(load_crop(crop,self.img_infos['paths'][crop[0]]))
+        result = np.array(pil_resize(load_crop(crop,self.img_infos['paths'][crop[0]]),self.dim))
         return result
 
 
@@ -307,8 +370,9 @@ class jalbertDataset(utils.Dataset):
         """
         
         crop = self.img_infos['list_crops'][self.split[image_id]]
-        result = load_crop(crop,self.img_infos['paths'][crop[0]])
-        result_mask = load_crop_mask(crop,self.img_infos['mask_paths'][crop[0]])
+        #print(crop)
+        #result = pil_resize(load_crop(crop,self.img_infos['paths'][crop[0]]),self.dim)
+        result_mask = pil_resize(load_crop_mask(crop,self.img_infos['mask_paths'][crop[0]]),self.dim)
 
         result_mask_np = np.asarray(result_mask)
         instances = np.unique(result_mask_np)
