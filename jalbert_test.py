@@ -20,16 +20,11 @@ import re
 import time
 import numpy as np
 import cv2
-import matplotlib
-import matplotlib.pyplot as plt
-
+from tqdm import tqdm,trange
 from config import Config
 import utils
 import model as modellib
-import visualize
 from model import log
-
-#get_ipython().magic('matplotlib inline')
 
 # Root directory of the project
 ROOT_DIR = os.getcwd()
@@ -37,33 +32,7 @@ ROOT_DIR = os.getcwd()
 # Directory to save logs and trained model
 MODEL_DIR = os.path.join(ROOT_DIR, "logs")
 
-# Local path to trained weights file
-COCO_MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.h5")
-# Download COCO trained weights from Releases if needed
-if not os.path.exists(COCO_MODEL_PATH):
-    utils.download_trained_weights(COCO_MODEL_PATH)
-
-
-# ## Notebook Preferences
-
-# In[3]:
-
-def get_ax(rows=1, cols=1, size=8):
-    """Return a Matplotlib Axes array to be used in
-    all visualizations in the notebook. Provide a
-    central point to control graph sizes.
-    
-    Change the default size attribute to control the size
-    of rendered images
-    """
-    _, ax = plt.subplots(rows, cols, figsize=(size*cols, size*rows))
-    return ax
-
-
-# ## Dataset
-
-# In[4]:
-
+## Dataset
 import jalbert
 config = jalbert.jalbertConfig()
 dim = 512
@@ -73,43 +42,50 @@ groundtruth_path='/dds/work/workspace/data_ja/RF-CAT1-v1.0.csv'
 
 scales = [0.8, 1., 1.25]
 
-nb_img = 77
-split_train = slice(1,nb_img//2)
-split_test = slice(nb_img//2,nb_img)
+dataset = jalbert.jalbertDataset()
+dataset.load_jalbert(dim, data_folder,groundtruth_path, scales)#, force_new_dataset=True)
+dataset.prepare()
+print("Image Count: {}".format(len(dataset.image_ids)))
+print("Class Count: {}".format(dataset.num_classes))
+for i, info in enumerate(dataset.class_info):
+    print("{:3}. {:50}".format(i, info['name']))
 
-print("")
-print(40*'~')
-print("validation")
-print("")
+nb_img = dataset.num_images
+split_train = slice(1,2*nb_img//3)
+split_val = slice(2*nb_img//3,nb_img)
+
+
+#nb_img = 77
+#split_train = slice(1,nb_img//2)
+#split_val = slice(nb_img//2,nb_img)
+
+dataset_train = jalbert.jalbertDataset()
+dataset_train.load_jalbert(dim, data_folder,groundtruth_path, scales, split=split_train)#, force_new_dataset=True)
+dataset_train.prepare()
+
 dataset_val = jalbert.jalbertDataset()
-dataset_val.load_jalbert(dim, data_folder,groundtruth_path, scales, split_test)
+dataset_val.load_jalbert(dim, data_folder,groundtruth_path, scales, split=split_val)#, force_new_dataset=True)
 dataset_val.prepare()
 
+#dataset_train = jalbert.copydataset(dataset,split_train)
+#dataset_val = jalbert.copydataset(dataset,split_val)
+
+print("Train")
+print("Image Count: {}".format(len(dataset_train.image_ids)))
+print("Class Count: {}".format(dataset_train.num_classes))
+for i, info in enumerate(dataset_train.class_info):
+    print("{:3}. {:50}".format(i, info['name']))
+
+print("Val")
 print("Image Count: {}".format(len(dataset_val.image_ids)))
 print("Class Count: {}".format(dataset_val.num_classes))
 for i, info in enumerate(dataset_val.class_info):
     print("{:3}. {:50}".format(i, info['name']))
 
 
-# In[5]:
+#config.display()
 
-#config.IMAGES_PER_GPU = 2
-config.display()
-
-
-# In[6]:
-
-# Load and display random samples
-#image_ids = np.random.choice(dataset_train.image_ids, 3)
-#for image_id in image_ids:
-#    image = dataset_train.load_image(image_id)
-#    mask, class_ids = dataset_train.load_mask(image_id)
-#    visualize.display_top_masks(image, mask, class_ids, dataset_train.class_names)
-
-# ## Detection
-
-# In[ ]:
-
+## Detection
 class InferenceConfig(jalbert.jalbertConfig):
     GPU_COUNT = 1
     IMAGES_PER_GPU = 1
@@ -127,6 +103,9 @@ model = modellib.MaskRCNN(mode="inference",
 model_path = model.find_last()[1]
 
 model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180311T2313/mask_rcnn_jalbert_0025.h5" #p 0.9 r 0.4
+model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180319T2339/mask_rcnn_jalbert_0020.h5" # v2 p50 r54
+model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180319T2339/mask_rcnn_jalbert_0003.h5" # v2 p40 r57 à 50%
+model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180319T2339/mask_rcnn_jalbert_0010.h5" # v2 p45 r59
 #model_path = os.path.join(MODEL_DIR, "mask_rcnn_shapes_jalbert_all.h5")
 
 # Load trained weights (fill in path to trained weights here)
@@ -135,36 +114,7 @@ print("Loading weights from ", model_path)
 model.load_weights(model_path, by_name=True)
 
 
-# In[20]:
-
-# Test on a random image
-#image_id = random.choice(dataset_val.image_ids)
-#original_image, image_meta, gt_class_id, gt_bbox, gt_mask =    modellib.load_image_gt(dataset_val, inference_config, 
-#                           image_id, use_mini_mask=False)
-
-#log("original_image", original_image)
-#log("image_meta", image_meta)
-#log("gt_class_id", gt_class_id)
-#log("gt_bbox", gt_bbox)
-#log("gt_mask", gt_mask)
-
-#visualize.display_instances(original_image, gt_bbox, gt_mask, gt_class_id, 
-#                            dataset_train.class_names, figsize=(8, 8))
-
-
-# In[21]:
-
-#results = model.detect([original_image], verbose=1)
-
-#r = results[0]
-#visualize.display_instances(original_image, r['rois'], r['masks'], r['class_ids'], 
-#                            dataset_val.class_names, r['scores'], ax=get_ax())
-
-
-# ## Evaluation
-
-# In[22]:
-from tqdm import tqdm
+dataset_val = dataset_train
 
 nb_test_images = len(dataset_val.image_ids)
 print("testing on "+str(nb_test_images)+" images...")
@@ -173,7 +123,10 @@ APs = []
 match_counts = []
 pred_counts = []
 gt_boxes_counts = []
-for image_id in tqdm(image_ids):
+
+e = 0.0000000000000000001
+t = tqdm(image_ids)
+for image_id in t: #qdm(image_ids):
     # Load image and ground truth data
     image, image_meta, gt_class_id, gt_bbox, gt_mask =        modellib.load_image_gt(dataset_val, inference_config,
                                image_id, use_mini_mask=False)
@@ -191,7 +144,11 @@ for image_id in tqdm(image_ids):
     match_counts.append(match_count)
     pred_counts.append(pred_count)
     gt_boxes_counts.append(gt_boxes_count)
-    
+    t.set_postfix( mAP=np.mean(APs),match=np.sum(match_counts),pred=np.sum(pred_counts),gt=np.sum(gt_boxes_counts),p=(e+np.sum(match_counts))/(e+np.sum(pred_counts)),r=(e+np.sum(match_counts))/(e+np.sum(gt_boxes_counts)))
+
+
+
+
 print("mAP: ", np.mean(APs))
 print("match_count: ", np.sum(match_counts))
 print("pred_count: ", np.sum(pred_counts))

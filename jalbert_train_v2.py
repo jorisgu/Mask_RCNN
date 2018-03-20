@@ -106,7 +106,7 @@ model = modellib.MaskRCNN(mode="training", config=config, model_dir=MODEL_DIR)
 
 
 # Which weights to start with?
-init_with = "imagenet"  # imagenet, coco, or last
+init_with = "coco"  # imagenet, coco, or last
 
 if init_with == "imagenet":
     model.load_weights(model.get_imagenet_weights(), by_name=True)
@@ -128,7 +128,7 @@ elif init_with == "last":
 # which layers to train by name pattern.
 model.train(dataset_train, dataset_val, 
             learning_rate=config.LEARNING_RATE, 
-            epochs=3, 
+            epochs=100, 
             layers='heads')
 
 
@@ -137,8 +137,8 @@ model.train(dataset_train, dataset_val,
 # pass a regular expression to select which layers to
 # train by name pattern.
 model.train(dataset_train, dataset_val, 
-            learning_rate=config.LEARNING_RATE / 10,
-            epochs=20, 
+            learning_rate=config.LEARNING_RATE / 1000,
+            epochs=110, 
             layers="all")
 
 class InferenceConfig(jalbert.jalbertConfig):
