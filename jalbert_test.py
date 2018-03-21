@@ -100,12 +100,28 @@ model = modellib.MaskRCNN(mode="inference",
 # Get path to saved weights
 # Either set a specific path or find last trained weights
 # model_path = os.path.join(ROOT_DIR, ".h5 file name here")
+
 model_path = model.find_last()[1]
+
 
 model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180311T2313/mask_rcnn_jalbert_0025.h5" #p 0.9 r 0.4
 model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180319T2339/mask_rcnn_jalbert_0020.h5" # v2 p50 r54
-model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180319T2339/mask_rcnn_jalbert_0003.h5" # v2 p40 r57 à 50%
+model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180319T2339/mask_rcnn_jalbert_0003.h5" # v2 p45 r59
 model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180319T2339/mask_rcnn_jalbert_0010.h5" # v2 p45 r59
+model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180320T1743/mask_rcnn_jalbert_0110.h5" #v2 p53 r63
+model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180320T1743/mask_rcnn_jalbert_0050.h5" #v2 p48 r61
+model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180320T1743/mask_rcnn_jalbert_0100.h5" #v2 p58 r70
+model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180320T1743/mask_rcnn_jalbert_0090.h5" #v2 p55 r63
+model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180320T1743/mask_rcnn_jalbert_0085.h5" #v2 p55 r62
+model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180320T1743/mask_rcnn_jalbert_0080.h5" #v2 p61 r73 #####
+model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180320T1743/mask_rcnn_jalbert_0075.h5" #v2 p58 r65
+model_path = "/dds/work/workspace/Mask_RCNN/logs/jalbert20180320T1743/mask_rcnn_jalbert_0070.h5" #v2 p59 r68
+
+
+
+
+
+
 #model_path = os.path.join(MODEL_DIR, "mask_rcnn_shapes_jalbert_all.h5")
 
 # Load trained weights (fill in path to trained weights here)
@@ -114,7 +130,7 @@ print("Loading weights from ", model_path)
 model.load_weights(model_path, by_name=True)
 
 
-dataset_val = dataset_train
+#dataset_val = dataset_train
 
 nb_test_images = len(dataset_val.image_ids)
 print("testing on "+str(nb_test_images)+" images...")
